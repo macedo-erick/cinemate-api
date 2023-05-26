@@ -1,11 +1,16 @@
 /* eslint-disable max-len,import/extensions,no-console */
 import NodeCache from 'node-cache';
 import express from 'express';
-import service from './service/base-service.js';
+import cors from 'cors';
+import translate from 'translate';
+import BaseService from './service/base-service.js';
 import logger from './config/logger.js';
 
 const app = express();
 const cache = new NodeCache();
+const service = BaseService().instance;
+
+app.use(cors());
 
 app.get('/movies', async (req, res) => {
   const { movieName, page } = req.query;
@@ -35,6 +40,36 @@ app.get('/movies', async (req, res) => {
   });
 
   if (movieName) cache.set(movieName.concat(page), axiosResponse.data, 30);
+
+  return res.send(axiosResponse.data).status(axiosResponse.status);
+});
+
+app.get('/movies/:omdbId', async (req, res) => {
+  const { omdbId } = req.params;
+
+  logger.log('info', 'Trying to retrieve movie for omdb id [%s]', omdbId);
+
+  if (cache.has(omdbId)) {
+    logger.log('info', 'Found cached information for omdb id [%s]', omdbId);
+
+    return res.send(cache.get(omdbId)).status(200);
+  }
+
+  logger.log(
+    'info',
+    'No cached information found information for omdb id [%s]',
+    omdbId,
+  );
+
+  const axiosResponse = await service.get('', {
+    params: { i: omdbId, plot: 'full' },
+  });
+
+  const translations = await translate(axiosResponse.data.Plot, 'pt');
+
+  console.log(translations);
+
+  if (omdbId) cache.set(omdbId, axiosResponse.data, 30);
 
   return res.send(axiosResponse.data).status(axiosResponse.status);
 });

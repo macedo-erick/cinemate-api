@@ -3,10 +3,16 @@ import { config } from 'dotenv';
 
 config();
 
-const apiKey = process.env.API_KEY;
+const BaseService = () => {
+  const apiKey = process.env.API_KEY;
 
-const axiosInstance = axios.create({
-  baseURL: `https://www.omdbapi.com/?apikey=${apiKey}`,
-});
+  const instance = axios.create({
+    baseURL: 'https://www.omdbapi.com',
+    params: { apiKey },
+  });
 
-export default axiosInstance;
+  return {
+    instance,
+  };
+};
+export default BaseService;
