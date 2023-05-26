@@ -16,32 +16,35 @@ app.get('/movies', async (req, res) => {
   const { movieName, page } = req.query;
 
   logger.log('info', 'Trying to retrieve movies for name [%s]', movieName);
+  try {
+    if (cache.has(movieName.concat(page))) {
+      logger.log(
+        'info',
+        'Found cached information for name [%s] and page [%d]',
+        movieName,
+        page,
+      );
 
-  if (cache.has(movieName.concat(page))) {
+      return res.send(cache.get(movieName.concat(page))).status(200);
+    }
+
     logger.log(
       'info',
-      'Found cached information for name [%s] and page [%d]',
+      'No cached information found for name [%s] and page [%d]',
       movieName,
       page,
     );
 
-    return res.send(cache.get(movieName.concat(page))).status(200);
+    const axiosResponse = await service.get('', {
+      params: { s: movieName, page: page || 1 },
+    });
+
+    if (movieName) cache.set(movieName.concat(page), axiosResponse.data, 30);
+
+    return res.send(axiosResponse.data).status(axiosResponse.status);
+  } catch (error) {
+    return res.send({ error }).status(500);
   }
-
-  logger.log(
-    'info',
-    'No cached information found for name [%s] and page [%d]',
-    movieName,
-    page,
-  );
-
-  const axiosResponse = await service.get('', {
-    params: { s: movieName, page: page || 1 },
-  });
-
-  if (movieName) cache.set(movieName.concat(page), axiosResponse.data, 30);
-
-  return res.send(axiosResponse.data).status(axiosResponse.status);
 });
 
 app.get('/movies/:omdbId', async (req, res) => {
@@ -49,29 +52,33 @@ app.get('/movies/:omdbId', async (req, res) => {
 
   logger.log('info', 'Trying to retrieve movie for omdb id [%s]', omdbId);
 
-  if (cache.has(omdbId)) {
-    logger.log('info', 'Found cached information for omdb id [%s]', omdbId);
+  try {
+    if (cache.has(omdbId)) {
+      logger.log('info', 'Found cached information for omdb id [%s]', omdbId);
 
-    return res.send(cache.get(omdbId)).status(200);
+      return res.send(cache.get(omdbId)).status(200);
+    }
+
+    logger.log(
+      'info',
+      'No cached information found information for omdb id [%s]',
+      omdbId,
+    );
+
+    const axiosResponse = await service.get('', {
+      params: { i: omdbId, plot: 'full' },
+    });
+
+    const translations = await translate(axiosResponse.data.Plot, 'pt');
+
+    console.log(translations);
+
+    if (omdbId) cache.set(omdbId, axiosResponse.data, 30);
+
+    return res.send(axiosResponse.data).status(axiosResponse.status);
+  } catch (error) {
+    return res.send({ error }).status(500);
   }
-
-  logger.log(
-    'info',
-    'No cached information found information for omdb id [%s]',
-    omdbId,
-  );
-
-  const axiosResponse = await service.get('', {
-    params: { i: omdbId, plot: 'full' },
-  });
-
-  const translations = await translate(axiosResponse.data.Plot, 'pt');
-
-  console.log(translations);
-
-  if (omdbId) cache.set(omdbId, axiosResponse.data, 30);
-
-  return res.send(axiosResponse.data).status(axiosResponse.status);
 });
 
 app.listen(process.env.API_PORT, () => {
