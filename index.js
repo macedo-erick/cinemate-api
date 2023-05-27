@@ -1,85 +1,14 @@
 /* eslint-disable max-len,import/extensions,no-console */
-import NodeCache from 'node-cache';
 import express from 'express';
 import cors from 'cors';
-import translate from 'translate';
-import BaseService from './service/base-service.js';
-import logger from './config/logger.js';
+import LoggerService from './service/logger.service.js';
+import movieRoutes from './controller/movie.controller.js';
 
 const app = express();
-const cache = new NodeCache();
-const service = BaseService().instance;
+const loggerService = LoggerService('index.js');
 
 app.use(cors());
-
-app.get('/movies', async (req, res) => {
-  const { movieName, page } = req.query;
-
-  logger.log('info', 'Trying to retrieve movies for name [%s]', movieName);
-  try {
-    if (cache.has(movieName.concat(page))) {
-      logger.log(
-        'info',
-        'Found cached information for name [%s] and page [%d]',
-        movieName,
-        page,
-      );
-
-      return res.send(cache.get(movieName.concat(page))).status(200);
-    }
-
-    logger.log(
-      'info',
-      'No cached information found for name [%s] and page [%d]',
-      movieName,
-      page,
-    );
-
-    const axiosResponse = await service.get('', {
-      params: { s: movieName, page: page || 1 },
-    });
-
-    if (movieName) cache.set(movieName.concat(page), axiosResponse.data, 30);
-
-    return res.send(axiosResponse.data).status(axiosResponse.status);
-  } catch (error) {
-    return res.send({ error }).status(500);
-  }
-});
-
-app.get('/movies/:omdbId', async (req, res) => {
-  const { omdbId } = req.params;
-
-  logger.log('info', 'Trying to retrieve movie for omdb id [%s]', omdbId);
-
-  try {
-    if (cache.has(omdbId)) {
-      logger.log('info', 'Found cached information for omdb id [%s]', omdbId);
-
-      return res.send(cache.get(omdbId)).status(200);
-    }
-
-    logger.log(
-      'info',
-      'No cached information found information for omdb id [%s]',
-      omdbId,
-    );
-
-    const axiosResponse = await service.get('', {
-      params: { i: omdbId, plot: 'full' },
-    });
-
-    const translations = await translate(axiosResponse.data.Plot, 'pt');
-
-    console.log(translations);
-
-    if (omdbId) cache.set(omdbId, axiosResponse.data, 30);
-
-    return res.send(axiosResponse.data).status(axiosResponse.status);
-  } catch (error) {
-    return res.send({ error }).status(500);
-  }
-});
+app.use('/movies', movieRoutes);
 
 app.listen(process.env.API_PORT, () => {
   console.log(
@@ -101,5 +30,5 @@ app.listen(process.env.API_PORT, () => {
       + '                                                                             \n'
       + '\n',
   );
-  logger.log('info', 'App listening on port %d', process.env.API_PORT);
+  loggerService.info('App listening on port %d', process.env.API_PORT);
 });
