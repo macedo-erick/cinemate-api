@@ -29,7 +29,11 @@ const MovieService = () => {
     synopsis: movie.overview,
     poster: `https://image.tmdb.org/t/p/original${movie.poster_path}`,
     year: movie.release_date.replace(/(\d{4})(.*)/, '$1'),
-    releasedDate: new Date(movie.release_date).toLocaleDateString('en'),
+    releasedDate: new Date(movie.release_date).toLocaleDateString('en-US', {
+      month: '2-digit',
+      day: '2-digit',
+      year: 'numeric',
+    }),
     imdbId: movie.imdb_id,
     languages: movie.spoken_languages.map((l) => l.english_name),
     genre: movie.genres.map((g) => g.name),
