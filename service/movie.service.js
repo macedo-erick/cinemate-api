@@ -8,7 +8,7 @@ const MovieService = () => {
   const MAX_CACHE_TIMEOUT = 3600;
   const loggerService = LoggerService('movie.service');
 
-  const transformData = (movie) => ({
+  const transformOMDBData = (movie) => ({
     title: movie.Title,
     releasedDate: movie.Released,
     genre: movie.Genre.split(', '),
@@ -16,12 +16,24 @@ const MovieService = () => {
     writer: movie.Writer,
     actors: movie.Actors,
     synopsis: movie.Plot,
-    languages: movie.Language,
+    languages: movie.Language.split(', '),
     country: movie.Country,
     poster: movie.Poster,
     rating: movie.imdbRating,
     year: movie.Year,
     imdbId: movie.imdbID,
+  });
+
+  const transformTMDBData = (movie) => ({
+    title: movie.title,
+    synopsis: movie.overview,
+    poster: 'https://image.tmdb.org/t/p/original' + movie.poster_path,
+    year: movie.release_date.replace(/(\d{4})(.*)/, '$1'),
+    releasedDate: new Date(movie.release_date).toLocaleDateString('en'),
+    imdbId: movie.imdb_id,
+    languages: movie.spoken_languages.map((l) => l.english_name),
+    genre: movie.genres.map((g) => g.name),
+    runtime: movie.runtime,
   });
 
   const getMovieInfo = async (imdbId) => {
@@ -45,7 +57,7 @@ const MovieService = () => {
 
       if (data.Error) throw data.Error;
 
-      const movie = transformData(data);
+      const movie = transformOMDBData(data);
 
       if (imdbId) {
         cache.set(imdbId, movie, MAX_CACHE_TIMEOUT);
@@ -110,22 +122,36 @@ const MovieService = () => {
 
   const getUpcomingMovies = async (req, res) => {
     try {
+      loggerService.info('Trying to retrieve upcoming movies');
+
       if (cache.has('upcoming')) {
+        loggerService.info('Found cached information for upcoming movies');
         return res.send(cache.get('upcoming'));
       }
 
-      const { data } = await BaseService.tmdbService.get('/upcoming');
+      loggerService.info('No cached information found for upcoming movies');
 
-      const movieInfos = await Promise.all(
+      const { data } = await BaseService.tmdbService.get('/discover/movie', {
+        params: {
+          include_adult: false,
+          include_video: false,
+          language: 'en-US',
+          page: 1,
+          'primary_release_date.gte': new Date(),
+          sort_by: 'popularity.desc',
+        },
+      });
+
+      const movies = await Promise.all(
         data.results.map(async (r) => {
-          const { data } = await BaseService.tmdbService.get(`/${r.id}`);
-          return await getMovieInfo(data.imdb_id);
+          const { data } = await BaseService.tmdbService.get(`/movie/${r.id}`);
+          return transformTMDBData(data);
         }),
       );
 
-      cache.set('upcoming', movieInfos, MAX_CACHE_TIMEOUT)
+      cache.set('upcoming', movies, MAX_CACHE_TIMEOUT);
 
-      return res.send(movieInfos);
+      return res.send(movies);
     } catch (error) {
       return res.status(500).send(error);
     }
@@ -133,22 +159,27 @@ const MovieService = () => {
 
   const getPopularMovies = async (req, res) => {
     try {
+      loggerService.info('Trying to retrieve popular movies');
+
       if (cache.has('popular')) {
-        return res.send(cache.get('popular'))
+        loggerService.info('Found cached information for popular movies');
+        return res.send(cache.get('popular'));
       }
 
-      const { data } = await BaseService.tmdbService.get('/popular');
+      loggerService.info('No cached information found for popular movies');
 
-      const movieInfos = await Promise.all(
+      const { data } = await BaseService.tmdbService.get('/movie/popular');
+
+      const movies = await Promise.all(
         data.results.map(async (r) => {
-          const { data } = await BaseService.tmdbService.get(`/${r.id}`);
-          return await getMovieInfo(data.imdb_id);
+          const { data } = await BaseService.tmdbService.get(`/movie/${r.id}`);
+          return transformTMDBData(data);
         }),
       );
 
-      cache.set('popular', movieInfos, MAX_CACHE_TIMEOUT)
+      cache.set('popular', movies, MAX_CACHE_TIMEOUT);
 
-      return res.send(movieInfos);
+      return res.send(movies);
     } catch (error) {
       return res.status(500).send(error);
     }

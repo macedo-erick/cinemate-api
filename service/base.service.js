@@ -13,7 +13,7 @@ const BaseService = () => {
   });
 
   const tmdbService = axios.create({
-    baseURL: 'https://api.themoviedb.org/3/movie',
+    baseURL: 'https://api.themoviedb.org/3',
     headers: { Authorization: `Bearer ${apiToken}` },
   });
 
