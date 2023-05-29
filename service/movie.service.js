@@ -1,4 +1,4 @@
-/* eslint-disable */
+/* eslint-disable no-shadow */
 import NodeCache from 'node-cache';
 import BaseService from './base.service.js';
 import LoggerService from './logger.service.js';
@@ -27,7 +27,7 @@ const MovieService = () => {
   const transformTMDBData = (movie) => ({
     title: movie.title,
     synopsis: movie.overview,
-    poster: 'https://image.tmdb.org/t/p/original' + movie.poster_path,
+    poster: `https://image.tmdb.org/t/p/original${movie.poster_path}`,
     year: movie.release_date.replace(/(\d{4})(.*)/, '$1'),
     releasedDate: new Date(movie.release_date).toLocaleDateString('en'),
     imdbId: movie.imdb_id,
