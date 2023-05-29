@@ -4,10 +4,23 @@ import { config } from 'dotenv';
 config();
 
 const apiKey = process.env.API_KEY;
+const apiToken = process.env.API_TOKEN;
 
-const BaseService = axios.create({
-  baseURL: 'https://www.omdbapi.com',
-  params: { apiKey },
-});
+const BaseService = () => {
+  const omdbService = axios.create({
+    baseURL: 'https://www.omdbapi.com',
+    params: { apiKey },
+  });
 
-export default BaseService;
+  const tmdbService = axios.create({
+    baseURL: 'https://api.themoviedb.org/3/movie',
+    headers: { Authorization: `Bearer ${apiToken}` },
+  });
+
+  return {
+    omdbService,
+    tmdbService,
+  };
+};
+
+export default BaseService();

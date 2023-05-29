@@ -1,14 +1,14 @@
-/* eslint-disable max-len,import/extensions,no-console */
+/* eslint-disable max-len,no-console */
 import express from 'express';
 import cors from 'cors';
 import LoggerService from './service/logger.service.js';
 import movieRoutes from './controller/movie.controller.js';
 
 const app = express();
-const loggerService = LoggerService('index.js');
+const loggerService = LoggerService('index');
 
 app.use(cors());
-app.use('/movies', movieRoutes);
+app.use('/api/v1/movies', movieRoutes);
 
 app.listen(process.env.API_PORT, () => {
   console.log(
