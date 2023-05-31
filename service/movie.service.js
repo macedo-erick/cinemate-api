@@ -1,4 +1,4 @@
-/* eslint-disable no-shadow */
+/* eslint-disable no-shadow,operator-linebreak */
 import NodeCache from 'node-cache';
 import BaseService from './base.service.js';
 import LoggerService from './logger.service.js';
@@ -6,217 +6,185 @@ import LoggerService from './logger.service.js';
 const MovieService = () => {
   const cache = new NodeCache();
   const MAX_CACHE_TIMEOUT = 3600;
+  const NO_IMAGE_URL =
+    'https://upload.wikimedia.org/wikipedia/commons/thumb/6/65/No-Image-Placeholder.svg/1200px-No-Image-Placeholder.svg.png';
   const loggerService = LoggerService('movie.service');
 
-  const transformOMDBData = (movie) => ({
-    title: movie.Title,
-    releasedDate: movie.Released,
-    genres: movie.Genre.split(', '),
-    director: movie.Director.split(', '),
-    writer: movie.Writer,
-    actors: movie.Actors,
-    synopsis: movie.Plot,
-    languages: movie.Language.split(', '),
-    country: movie.Country,
-    poster: movie.Poster,
-    rating: movie.imdbRating,
-    year: movie.Year,
-    imdbId: movie.imdbID,
-  });
-
-  const transformTMDBData = (movie) => ({
+  const transformMovieInfo = (movie) => ({
+    id: movie.id,
     title: movie.title,
     synopsis: movie.overview,
-    poster: `https://image.tmdb.org/t/p/original${movie.poster_path}`,
+    poster: movie.poster_path
+      ? `https://image.tmdb.org/t/p/original${movie.poster_path}`
+      : NO_IMAGE_URL,
     year: movie.release_date.replace(/(\d{4})(.*)/, '$1'),
     releasedDate: new Date(movie.release_date).toLocaleDateString('en-US', {
       month: '2-digit',
       day: '2-digit',
       year: 'numeric',
     }),
-    imdbId: movie.imdb_id,
     languages: movie.spoken_languages.map((l) => l.english_name),
     genres: movie.genres.map((g) => g.name),
     runtime: movie.runtime,
     rating: movie.vote_average,
-    videos: movie.videos?.results.map((v) => ({
-      name: v.name,
-      link: `https://www.youtube.com/watch?v=${v.key}`,
-    })),
   });
 
-  const getMovieInfo = async (imdbId) => {
-    loggerService.info('Trying to retrieve movie for omdb id [%s]', imdbId);
+  const getMovieDetail = async (id) => {
+    loggerService.info('Trying to retrieve movie for id [%s]', id);
 
-    try {
-      if (cache.has(imdbId)) {
-        loggerService.info('Found cached information for omdb id [%s]', imdbId);
+    if (cache.has(id)) {
+      loggerService.info('Found cached information for id [%s]', id);
 
-        return cache.get(imdbId);
-      }
-
-      loggerService.info(
-        'No cached information found information for omdb id [%s]',
-        imdbId,
-      );
-
-      const { data } = await BaseService.omdbService.get('', {
-        params: { i: imdbId, plot: 'full' },
-      });
-
-      if (data.Error) throw data.Error;
-
-      const movie = transformOMDBData(data);
-
-      if (imdbId) {
-        cache.set(imdbId, movie, MAX_CACHE_TIMEOUT);
-      }
-
-      return movie;
-    } catch (error) {
-      return error;
+      return cache.get(id);
     }
+
+    loggerService.info('No cached information found for id [%d]', id);
+
+    const { data } = await BaseService.tmdbService.get(`/movie/${id}`, {
+      params: { append_to_response: 'videos' },
+    });
+
+    const movie = transformMovieInfo(data);
+
+    cache.set(id, movie);
+
+    return movie;
   };
 
-  const getMovies = async (req, res) => {
-    const { movieName, page } = req.query;
+  const transformResponse = async (data) => {
+    const movies = await Promise.all(
+      data.results.map((r) => getMovieDetail(r.id)),
+    );
 
-    loggerService.info('Trying to retrieve movies for name [%s]', movieName);
+    return {
+      results: movies,
+      totalPages: data.total_pages,
+      page: data.page,
+      totalResults: data.total_results,
+    };
+  };
 
-    try {
-      if (cache.has(movieName.concat(page))) {
-        loggerService.info(
-          'Found cached information for name [%s] and page [%d]',
-          movieName,
-          page,
-        );
+  const getMovies = async (query, page) => {
+    loggerService.info('Trying to retrieve movies for name [%s]', query);
 
-        return res.send(cache.get(movieName.concat(page)));
-      }
-
+    if (cache.has(query.concat(page))) {
       loggerService.info(
-        'No cached information found for name [%s] and page [%d]',
-        movieName,
+        'Found cached information for name [%s] and page [%d]',
+        query,
         page,
       );
 
-      const { data, status, Error } = await BaseService.omdbService.get('', {
-        params: { s: movieName, type: 'movie', page },
-      });
-
-      if (Error) throw Error;
-
-      const { Search, totalResults } = data;
-
-      const movies = await Promise.all(
-        Search.map((m) => getMovieInfo(m.imdbID)),
-      );
-
-      const response = {
-        content: movies,
-        pages: Math.ceil(parseInt(totalResults, 10) / 10),
-        actualPage: parseInt(page, 10),
-        totalResults: parseInt(totalResults, 10),
-      };
-
-      if (movieName) {
-        cache.set(movieName.concat(page), response, MAX_CACHE_TIMEOUT);
-      }
-
-      return res.send(response).status(status);
-    } catch (error) {
-      return res.status(400).send({ error });
+      return cache.get(query.concat(page));
     }
+
+    loggerService.info(
+      'No cached information found for name [%s] and page [%d]',
+      query,
+      page,
+    );
+
+    const { data } = await BaseService.tmdbService.get('/search/movie', {
+      params: { query, page, include_adult: false },
+    });
+
+    const response = await transformResponse(data);
+
+    if (query && page) {
+      cache.set(query.concat(page), response, MAX_CACHE_TIMEOUT);
+    }
+
+    return response;
   };
 
-  const getUpcomingMovies = async (req, res) => {
-    try {
-      loggerService.info('Trying to retrieve upcoming movies');
+  const getUpcomingMovies = async () => {
+    loggerService.info('Trying to retrieve upcoming movies');
 
-      if (cache.has('upcoming')) {
-        loggerService.info('Found cached information for upcoming movies');
-        return res.send(cache.get('upcoming'));
-      }
-
-      loggerService.info('No cached information found for upcoming movies');
-
-      const { data } = await BaseService.tmdbService.get('/discover/movie', {
-        params: {
-          include_adult: false,
-          include_video: false,
-          language: 'en-US',
-          page: 1,
-          'primary_release_date.gte': new Date(),
-          sort_by: 'popularity.desc',
-        },
-      });
-
-      const movies = await Promise.all(
-        data.results.map(async (r) => {
-          const { data } = await BaseService.tmdbService.get(`/movie/${r.id}`);
-          return transformTMDBData(data);
-        }),
-      );
-
-      cache.set('upcoming', movies, MAX_CACHE_TIMEOUT);
-
-      return res.send(movies);
-    } catch (error) {
-      return res.status(500).send(error);
+    if (cache.has('upcoming')) {
+      loggerService.info('Found cached information for upcoming movies');
+      return cache.get('upcoming');
     }
+
+    loggerService.info('No cached information found for upcoming movies');
+
+    const { data } = await BaseService.tmdbService.get('/discover/movie', {
+      params: {
+        include_adult: false,
+        include_video: false,
+        language: 'en-US',
+        page: 1,
+        'primary_release_date.gte': new Date(),
+        sort_by: 'popularity.desc',
+      },
+    });
+
+    const response = await transformResponse(data);
+
+    cache.set('upcoming', response, MAX_CACHE_TIMEOUT);
+
+    return response;
   };
 
-  const getPopularMovies = async (req, res) => {
-    try {
-      loggerService.info('Trying to retrieve popular movies');
+  const getPopularMovies = async () => {
+    loggerService.info('Trying to retrieve popular movies');
 
-      if (cache.has('popular')) {
-        loggerService.info('Found cached information for popular movies');
-        return res.send(cache.get('popular'));
-      }
-
-      loggerService.info('No cached information found for popular movies');
-
-      const { data } = await BaseService.tmdbService.get('/movie/popular');
-
-      const movies = await Promise.all(
-        data.results.map(async (r) => {
-          const { data } = await BaseService.tmdbService.get(`/movie/${r.id}`);
-          return transformTMDBData(data);
-        }),
-      );
-
-      cache.set('popular', movies, MAX_CACHE_TIMEOUT);
-
-      return res.send(movies);
-    } catch (error) {
-      return res.status(500).send(error);
+    if (cache.has('popular')) {
+      loggerService.info('Found cached information for popular movies');
+      return cache.get('popular');
     }
+
+    loggerService.info('No cached information found for popular movies');
+
+    const { data } = await BaseService.tmdbService.get('/movie/popular');
+
+    const response = await transformResponse(data);
+
+    cache.set('popular', response, MAX_CACHE_TIMEOUT);
+
+    return response;
   };
 
-  const getMovieDetail = async (req, res) => {
-    try {
-      const { imdbId } = req.params;
+  const getRelatedMovies = async (id) => {
+    loggerService.info('Trying to retrieve related movies for id [%d]', id);
 
-      const { title } = await getMovieInfo(imdbId);
+    if (cache.has(`related-${id}`)) {
+      loggerService.info('Found cached related movies for id [%d]', id);
 
-      const queryResult = await BaseService.tmdbService.get('/search/movie', {
-        params: { query: title },
-      });
-
-      const { data } = await BaseService.tmdbService.get(
-        `/movie/${queryResult.data.results[0].id}`,
-        { params: { append_to_response: 'videos' } },
-      );
-
-      const movie = transformTMDBData(data);
-
-      cache.set(imdbId, movie);
-
-      return res.send(movie);
-    } catch (error) {
-      return res.status(500).send(error);
+      return cache.get(`related-${id}`);
     }
+
+    loggerService.info('No cached information found for id [%id]', id);
+
+    const { data } = await BaseService.tmdbService.get(`/movie/${id}/similar`);
+
+    const response = await transformResponse(data);
+
+    cache.set(`related-${id}`, response);
+
+    return response;
+  };
+
+  const getMovieVideos = async (id) => {
+    loggerService.info('Trying to retrieve videos for id [%d]', id);
+
+    if (cache.has(`video-${id}`)) {
+      loggerService.info('Found cached videos for id [%d]', id);
+
+      return cache.get(`video-${id}`);
+    }
+
+    loggerService.info('No cached information found for id [%d]', id);
+
+    const { data } = await BaseService.tmdbService.get(`/movie/${id}/videos`);
+
+    const response = data.results.map((v) => ({
+      name: v.name,
+      video: `https://www.youtube.com/embed/${v.key}`,
+      thumbnail: `https://i3.ytimg.com/vi/${v.key}/maxresdefault.jpg`,
+    }));
+
+    cache.set(`video-${id}`, response);
+
+    return response;
   };
 
   return {
@@ -224,6 +192,8 @@ const MovieService = () => {
     getUpcomingMovies,
     getPopularMovies,
     getMovieDetail,
+    getRelatedMovies,
+    getMovieVideos,
   };
 };
 
