@@ -11,7 +11,7 @@ const MovieService = () => {
   const transformOMDBData = (movie) => ({
     title: movie.Title,
     releasedDate: movie.Released,
-    genre: movie.Genre.split(', '),
+    genres: movie.Genre.split(', '),
     director: movie.Director.split(', '),
     writer: movie.Writer,
     actors: movie.Actors,
@@ -36,8 +36,13 @@ const MovieService = () => {
     }),
     imdbId: movie.imdb_id,
     languages: movie.spoken_languages.map((l) => l.english_name),
-    genre: movie.genres.map((g) => g.name),
+    genres: movie.genres.map((g) => g.name),
     runtime: movie.runtime,
+    rating: movie.vote_average,
+    videos: movie.videos?.results.map((v) => ({
+      name: v.name,
+      link: `https://www.youtube.com/watch?v=${v.key}`,
+    })),
   });
 
   const getMovieInfo = async (imdbId) => {
@@ -189,10 +194,36 @@ const MovieService = () => {
     }
   };
 
+  const getMovieDetail = async (req, res) => {
+    try {
+      const { imdbId } = req.params;
+
+      const { title } = await getMovieInfo(imdbId);
+
+      const queryResult = await BaseService.tmdbService.get('/search/movie', {
+        params: { query: title },
+      });
+
+      const { data } = await BaseService.tmdbService.get(
+        `/movie/${queryResult.data.results[0].id}`,
+        { params: { append_to_response: 'videos' } },
+      );
+
+      const movie = transformTMDBData(data);
+
+      cache.set(imdbId, movie);
+
+      return res.send(movie);
+    } catch (error) {
+      return res.status(500).send(error);
+    }
+  };
+
   return {
     getMovies,
     getUpcomingMovies,
     getPopularMovies,
+    getMovieDetail,
   };
 };
 
