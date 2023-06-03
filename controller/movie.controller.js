@@ -72,4 +72,16 @@ route.get('/:id/videos', async (req, res) => {
   }
 });
 
+route.get('/:id/reviews', async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    const data = await MovieService.getMovieReviews(id);
+
+    res.send(data);
+  } catch (error) {
+    res.status(500).send(error);
+  }
+});
+
 export default route;

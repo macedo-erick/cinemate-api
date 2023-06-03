@@ -1,13 +1,11 @@
-/* eslint-disable no-shadow,operator-linebreak */
+/* eslint-disable no-shadow,operator-linebreak,camelcase */
 import NodeCache from 'node-cache';
 import BaseService from './base.service.js';
 import LoggerService from './logger.service.js';
+import CONFIG from '../config/config.js';
 
 const MovieService = () => {
   const cache = new NodeCache();
-  const MAX_CACHE_TIMEOUT = 3600;
-  const NO_IMAGE_URL =
-    'https://upload.wikimedia.org/wikipedia/commons/thumb/6/65/No-Image-Placeholder.svg/1200px-No-Image-Placeholder.svg.png';
   const loggerService = LoggerService('movie.service');
 
   const transformMovieInfo = (movie) => ({
@@ -16,7 +14,7 @@ const MovieService = () => {
     synopsis: movie.overview,
     poster: movie.poster_path
       ? `https://image.tmdb.org/t/p/original${movie.poster_path}`
-      : NO_IMAGE_URL,
+      : CONFIG.NO_POSTER_URL,
     year: movie.release_date.replace(/(\d{4})(.*)/, '$1'),
     releasedDate: new Date(movie.release_date).toLocaleDateString('en-US', {
       month: '2-digit',
@@ -64,6 +62,16 @@ const MovieService = () => {
     };
   };
 
+  const handleAvatar = (avatar) => {
+    if (avatar) {
+      return avatar.includes('secure')
+        ? avatar.substring(1)
+        : `https://image.tmdb.org/t/p/original${avatar}`;
+    }
+
+    return '';
+  };
+
   const getMovies = async (query, page) => {
     loggerService.info('Trying to retrieve movies for name [%s]', query);
 
@@ -90,7 +98,7 @@ const MovieService = () => {
     const response = await transformResponse(data);
 
     if (query && page) {
-      cache.set(query.concat(page), response, MAX_CACHE_TIMEOUT);
+      cache.set(query.concat(page), response, CONFIG.MAX_CACHE_TIMEOUT);
     }
 
     return response;
@@ -119,7 +127,7 @@ const MovieService = () => {
 
     const response = await transformResponse(data);
 
-    cache.set('upcoming', response, MAX_CACHE_TIMEOUT);
+    cache.set('upcoming', response, CONFIG.MAX_CACHE_TIMEOUT);
 
     return response;
   };
@@ -138,7 +146,7 @@ const MovieService = () => {
 
     const response = await transformResponse(data);
 
-    cache.set('popular', response, MAX_CACHE_TIMEOUT);
+    cache.set('popular', response, CONFIG.MAX_CACHE_TIMEOUT);
 
     return response;
   };
@@ -187,6 +195,33 @@ const MovieService = () => {
     return response;
   };
 
+  const getMovieReviews = async (id) => {
+    loggerService.info('Trying to retrieve reviews for id [%d]', id);
+
+    if (cache.has(`review-${id}`)) {
+      loggerService.info('Found cached reviews for id [%d]', id);
+
+      return cache.get(`review-${id}`);
+    }
+
+    loggerService.info('No cached information found for id [%d]', id);
+
+    const { data } = await BaseService.tmdbService.get(`/movie/${id}/reviews`);
+
+    const response = data.results.map(
+      ({ author_details, content, created_at }) => ({
+        author: author_details.name || author_details.username,
+        avatar: handleAvatar(author_details.avatar_path),
+        rating: author_details.rating,
+        createdDate: created_at,
+        content,
+      }),
+    );
+
+    cache.set(`review-${id}`, response);
+
+    return response;
+  };
   return {
     getMovies,
     getUpcomingMovies,
@@ -194,6 +229,7 @@ const MovieService = () => {
     getMovieDetail,
     getRelatedMovies,
     getMovieVideos,
+    getMovieReviews,
   };
 };
 
