@@ -2,7 +2,7 @@
 import NodeCache from 'node-cache';
 import BaseService from './base.service.js';
 import LoggerService from './logger.service.js';
-import CONFIG from '../config/config.js';
+import UTILS from '../util/util.js';
 
 const MovieService = () => {
   const cache = new NodeCache();
@@ -14,7 +14,7 @@ const MovieService = () => {
     synopsis: movie.overview,
     poster: movie.poster_path
       ? `https://image.tmdb.org/t/p/original${movie.poster_path}`
-      : CONFIG.NO_POSTER_URL,
+      : UTILS.NO_POSTER_URL,
     year: movie.release_date.replace(/(\d{4})(.*)/, '$1'),
     releasedDate: new Date(movie.release_date).toLocaleDateString('en-US', {
       month: '2-digit',
@@ -38,7 +38,7 @@ const MovieService = () => {
 
     loggerService.info('No cached information found for id [%d]', id);
 
-    const { data } = await BaseService.tmdbService.get(`/movie/${id}`, {
+    const { data } = await BaseService.get(`/movie/${id}`, {
       params: { append_to_response: 'videos' },
     });
 
@@ -91,14 +91,14 @@ const MovieService = () => {
       page,
     );
 
-    const { data } = await BaseService.tmdbService.get('/search/movie', {
+    const { data } = await BaseService.get('/search/movie', {
       params: { query, page, include_adult: false },
     });
 
     const response = await transformResponse(data);
 
     if (query && page) {
-      cache.set(query.concat(page), response, CONFIG.MAX_CACHE_TIMEOUT);
+      cache.set(query.concat(page), response, UTILS.MAX_CACHE_TIMEOUT);
     }
 
     return response;
@@ -114,7 +114,7 @@ const MovieService = () => {
 
     loggerService.info('No cached information found for upcoming movies');
 
-    const { data } = await BaseService.tmdbService.get('/discover/movie', {
+    const { data } = await BaseService.get('/discover/movie', {
       params: {
         include_adult: false,
         include_video: false,
@@ -127,7 +127,7 @@ const MovieService = () => {
 
     const response = await transformResponse(data);
 
-    cache.set('upcoming', response, CONFIG.MAX_CACHE_TIMEOUT);
+    cache.set('upcoming', response, UTILS.MAX_CACHE_TIMEOUT);
 
     return response;
   };
@@ -142,11 +142,11 @@ const MovieService = () => {
 
     loggerService.info('No cached information found for popular movies');
 
-    const { data } = await BaseService.tmdbService.get('/movie/popular');
+    const { data } = await BaseService.get('/movie/popular');
 
     const response = await transformResponse(data);
 
-    cache.set('popular', response, CONFIG.MAX_CACHE_TIMEOUT);
+    cache.set('popular', response, UTILS.MAX_CACHE_TIMEOUT);
 
     return response;
   };
@@ -162,7 +162,7 @@ const MovieService = () => {
 
     loggerService.info('No cached information found for id [%id]', id);
 
-    const { data } = await BaseService.tmdbService.get(`/movie/${id}/similar`);
+    const { data } = await BaseService.get(`/movie/${id}/similar`);
 
     const response = await transformResponse(data);
 
@@ -182,7 +182,7 @@ const MovieService = () => {
 
     loggerService.info('No cached information found for id [%d]', id);
 
-    const { data } = await BaseService.tmdbService.get(`/movie/${id}/videos`);
+    const { data } = await BaseService.get(`/movie/${id}/videos`);
 
     const response = data.results.map((v) => ({
       name: v.name,
@@ -206,7 +206,7 @@ const MovieService = () => {
 
     loggerService.info('No cached information found for id [%d]', id);
 
-    const { data } = await BaseService.tmdbService.get(`/movie/${id}/reviews`);
+    const { data } = await BaseService.get(`/movie/${id}/reviews`);
 
     const response = data.results.map(
       ({ author_details, content, created_at }) => ({
