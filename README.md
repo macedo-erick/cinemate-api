@@ -1,5 +1,5 @@
 
-<h1 align="center"> movie-api </h1>
+<h1 align="center"> cinemate-api </h1>
 
 <p align="center"> 
 <a href="#"><img src="https://img.shields.io/badge/node.js-6DA55F?style=for-the-badge&logo=node.js&logoColor=white"/></a>
