@@ -26,7 +26,6 @@ const LoggerService = (component) => {
   });
 
   const info = (message, ...args) => logger.log('info', message, ...args);
-
   const error = (message, ...args) => logger.log('error', message, ...args);
 
   return {

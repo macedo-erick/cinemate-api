@@ -8,24 +8,42 @@ const MovieService = () => {
   const cache = new NodeCache();
   const loggerService = LoggerService('movie.service');
 
-  const transformMovieInfo = (movie) => ({
-    id: movie.id,
-    title: movie.title,
-    synopsis: movie.overview,
-    poster: movie.poster_path
-      ? `https://image.tmdb.org/t/p/original${movie.poster_path}`
-      : UTILS.NO_POSTER_URL,
-    year: movie.release_date.replace(/(\d{4})(.*)/, '$1'),
-    releasedDate: new Date(movie.release_date).toLocaleDateString('en-US', {
+  const getFullPosterURL = (path) => {
+    if (path) {
+      return `https://image.tmdb.org/t/p/original${path}`;
+    }
+
+    return UTILS.NO_POSTER_URL;
+  };
+
+  const formatReleaseDate = (date) => {
+    if (!date) return '0000';
+
+    return new Date(date).toLocaleDateString('en-US', {
       month: '2-digit',
       day: '2-digit',
       year: 'numeric',
-    }),
-    languages: movie.spoken_languages.map((l) => l.english_name),
-    genres: movie.genres.map((g) => g.name),
-    runtime: movie.runtime,
-    rating: movie.vote_average,
-  });
+    });
+  };
+
+  const convertMovieResponse = (movie) => {
+    const posterURL = getFullPosterURL(movie.poster_path);
+    const releaseYear = movie.release_date ? movie.release_date.replace(/(\d{4})(.*)/, '$1') : '';
+    const releaseDate = formatReleaseDate(movie.release_date);
+
+    return {
+      id: movie.id,
+      title: movie.title,
+      synopsis: movie.overview,
+      poster: posterURL,
+      year: releaseYear,
+      releasedDate: releaseDate,
+      languages: movie.spoken_languages.map(({ english_name }) => english_name),
+      genres: movie.genres.map(({ name }) => name),
+      runtime: movie.runtime,
+      rating: movie.vote_average,
+    };
+  };
 
   const getMovieDetail = async (id) => {
     loggerService.info('Trying to retrieve movie for id [%s]', id);
@@ -42,14 +60,14 @@ const MovieService = () => {
       params: { append_to_response: 'videos' },
     });
 
-    const movie = transformMovieInfo(data);
+    const movie = convertMovieResponse(data);
 
     cache.set(id, movie);
 
     return movie;
   };
 
-  const transformResponse = async (data) => {
+  const convertResponse = async (data) => {
     const movies = await Promise.all(
       data.results.map((r) => getMovieDetail(r.id)),
     );
@@ -62,7 +80,7 @@ const MovieService = () => {
     };
   };
 
-  const handleAvatar = (avatar) => {
+  const resolveAvatarURL = (avatar) => {
     if (avatar) {
       return avatar.includes('secure')
         ? avatar.substring(1)
@@ -95,7 +113,7 @@ const MovieService = () => {
       params: { query, page, include_adult: false },
     });
 
-    const response = await transformResponse(data);
+    const response = await convertResponse(data);
 
     if (query && page) {
       cache.set(query.concat(page), response, UTILS.MAX_CACHE_TIMEOUT);
@@ -109,6 +127,7 @@ const MovieService = () => {
 
     if (cache.has('upcoming')) {
       loggerService.info('Found cached information for upcoming movies');
+
       return cache.get('upcoming');
     }
 
@@ -125,7 +144,7 @@ const MovieService = () => {
       },
     });
 
-    const response = await transformResponse(data);
+    const response = await convertResponse(data);
 
     cache.set('upcoming', response, UTILS.MAX_CACHE_TIMEOUT);
 
@@ -137,6 +156,7 @@ const MovieService = () => {
 
     if (cache.has('popular')) {
       loggerService.info('Found cached information for popular movies');
+
       return cache.get('popular');
     }
 
@@ -144,7 +164,7 @@ const MovieService = () => {
 
     const { data } = await BaseService.get('/movie/popular');
 
-    const response = await transformResponse(data);
+    const response = await convertResponse(data);
 
     cache.set('popular', response, UTILS.MAX_CACHE_TIMEOUT);
 
@@ -164,7 +184,7 @@ const MovieService = () => {
 
     const { data } = await BaseService.get(`/movie/${id}/similar`);
 
-    const response = await transformResponse(data);
+    const response = await convertResponse(data);
 
     cache.set(`related-${id}`, response);
 
@@ -211,7 +231,7 @@ const MovieService = () => {
     const response = data.results.map(
       ({ author_details, content, created_at }) => ({
         author: author_details.name || author_details.username,
-        avatar: handleAvatar(author_details.avatar_path),
+        avatar: resolveAvatarURL(author_details.avatar_path),
         rating: author_details.rating,
         createdDate: created_at,
         content,
@@ -222,6 +242,7 @@ const MovieService = () => {
 
     return response;
   };
+
   return {
     getMovies,
     getUpcomingMovies,
